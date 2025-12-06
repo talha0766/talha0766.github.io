@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rickshaw Runner</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 900px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: white;
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            font-size: 1.2em;
+            margin-bottom: 30px;
+        }
+        
+        #game-container {
+            background: #000;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            image-rendering: pixelated;
+        }
+        
+        .instructions {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            color: white;
+        }
+        
+        .instructions h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        .instructions p {
+            margin: 10px 0;
+            font-size: 1.1em;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 1.5em;
+            z-index: 10;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .error-message {
+            color: #ff6b6b;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛺 Rickshaw Runner</h1>
+        <p class="subtitle">Jump over obstacles and beat your high score!</p>
+        
+        <div id="game-container">
+            <div id="loading">Loading game...</div>
+            <canvas id="gameCanvas" width="800" height="400"></canvas>
+        </div>
+        
+        <div class="instructions">
+            <h2>How to Play</h2>
+            <p><strong>Press SPACE</strong> to jump over obstacles</p>
+            <p>Avoid the flying lights and bikes</p>
+            <p>Try to beat your high score!</p>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 400;
+        const GROUND_Y = 300;
+        const OBSTACLE_INTERVAL = 1500;
+        const GAME_SPEED = 6;
+        const JUMP_FORCE = -20;
+        const GRAVITY = 1;
+        const COLLISION_TOLERANCE = 0.50;
+        
+        // Game state
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const loading = document.getElementById('loading');
+        
+        let gameActive = false;
+        let startTime = 0;
+        let score = 0;
+        let highScore = 0;
+        
+        // Asset paths
+        const assetPaths = {
+            sky: './graphics/Sky.png',
+            ground: './graphics/ground.png',
+            playerWalk1: './graphics/Player/rick_walk1.png',
+            playerWalk2: './graphics/Player/rick_walk2.png',
+            playerJump: './graphics/Player/rick_jump.png',
+            playerStand: './graphics/Player/rick_stand.png',
+            bike1: './graphics/snail/bike1.png',
+            bike2: './graphics/snail/bike2.png',
+            light1: './graphics/Fly/light1.png',
+            light2: './graphics/Fly/light2.png',
+            music: './audio/music.wav',
+            jump: './audio/jump.mp3'
+        };
+        
+        // Assets storage
+        const images = {};
+        const sounds = {};
+        let assetsLoaded = 0;
+        const imageKeys = [
+            'sky', 'ground', 'playerWalk1', 'playerWalk2', 
+            'playerJump', 'playerStand', 'bike1', 'bike2', 
+            'light1', 'light2'
+        ];
+        const totalAssets = imageKeys.length;
+        
+        // Keyboard state
+        const keys = {};
+        
+        // Game objects
+        let player = null;
+        let obstacles = [];
+        let lastObstacleTime = 0;
+        
+        /**
+         * Player class - handles player movement, animation, and physics
+         */
+        class Player {
+            constructor() {
+                this.walkFrames = [images.playerWalk1, images.playerWalk2];
+                this.frameIndex = 0;
+                this.jumpFrame = images.playerJump;
+                this.x = 80;
+                this.y = GROUND_Y;
+                this.width = 64;
+                this.height = 64;
+                this.gravity = 0;
+                this.frameCounter = 0;
+                this.isJumping = false;
+            }
+            
+            input(keys) {
+                if (keys['Space'] && this.y >= GROUND_Y && !this.isJumping) {
+                    this.gravity = JUMP_FORCE;
+                    this.isJumping = true;
+                    playSound(sounds.jump);
+                }
+            }
+            
+            applyGravity() {
+                this.gravity += GRAVITY;
+                this.y += this.gravity;
+                
+                if (this.y >= GROUND_Y) {
+                    this.y = GROUND_Y;
+                    this.gravity = 0;
+                    this.isJumping = false;
+                }
+            }
+            
+            update(keys) {
+                this.input(keys);
+                this.applyGravity();
+                this.frameCounter += 0.1;
+            }
+            
+            draw() {
+                let img;
+                
+                if (this.y < GROUND_Y) {
+                    img = this.jumpFrame;
+                } else {
+                    const idx = Math.floor(this.frameCounter % this.walkFrames.length);
+                    img = this.walkFrames[idx];
+                }
+                
+                if (img && img.complete) {
+                    const imgWidth = img.width;
+                    const imgHeight = img.height;
+                    ctx.drawImage(img, this.x - imgWidth/2, this.y - imgHeight, imgWidth, imgHeight);
+                    this.width = imgWidth;
+                    this.height = imgHeight;
+                }
+            }
+            
+            getRect() {
+                return {
+                    x: this.x - this.width/2,
+                    y: this.y - this.height,
+                    width: this.width,
+                    height: this.height,
+                    left: this.x - this.width/2,
+                    right: this.x + this.width/2,
+                    top: this.y - this.height,
+                    bottom: this.y
+                };
+            }
+        }
+        
+        /**
+         * Obstacle class - handles obstacle movement and animation
+         */
+        class Obstacle {
+            constructor(type) {
+                this.type = type;
+                this.frameIndex = 0;
+                this.frameCounter = 0;
+                
+                if (type === 'fly') {
+                    this.frames = [images.light1, images.light2];
+                    this.y = 210;
+                } else {
+                    this.frames = [images.bike1, images.bike2];
+                    this.y = GROUND_Y;
+                }
+                
+                this.x = CANVAS_WIDTH + 100 + Math.random() * 200;
+                this.width = 64;
+                this.height = 64;
+            }
+            
+            update() {
+                this.frameCounter += 0.1;
+                this.x -= GAME_SPEED;
+            }
+            
+            draw() {
+                const idx = Math.floor(this.frameCounter % this.frames.length);
+                const img = this.frames[idx];
+                
+                if (img && img.complete) {
+                    const imgWidth = img.width;
+                    const imgHeight = img.height;
+                    ctx.drawImage(img, this.x - imgWidth/2, this.y - imgHeight, imgWidth, imgHeight);
+                    this.width = imgWidth;
+                    this.height = imgHeight;
+                }
+            }
+            
+            isOffScreen() {
+                return this.x < -100;
+            }
+            
+            getRect() {
+                return {
+                    x: this.x - this.width/2,
+                    y: this.y - this.height,
+                    width: this.width,
+                    height: this.height,
+                    left: this.x - this.width/2,
+                    right: this.x + this.width/2,
+                    top: this.y - this.height,
+                    bottom: this.y
+                };
+            }
+        }
+        
+        /**
+         * Load high score from localStorage
+         */
+        function loadHighScore() {
+            const saved = localStorage.getItem('rickshawRunnerHighScore');
+            return saved ? parseInt(saved) : 0;
+        }
+        
+        /**
+         * Save high score to localStorage
+         */
+        function saveHighScore(score) {
+            localStorage.setItem('rickshawRunnerHighScore', score.toString());
+        }
+        
+        /**
+         * Display current score and high score
+         */
+        function displayScore() {
+            const currentTime = Math.floor((Date.now() - startTime) / 1000);
+            
+            ctx.font = '50px Arial';
+            ctx.fillStyle = '#404040';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${currentTime}`, 50, 50);
+            
+            ctx.textAlign = 'right';
+            ctx.fillText(`High Score: ${highScore}`, CANVAS_WIDTH - 50, 50);
+            
+            return currentTime;
+        }
+        
+        /**
+         * Check collision between player and obstacles with tolerance
+         */
+        function checkCollision() {
+            const playerRect = player.getRect();
+            
+            for (let obstacle of obstacles) {
+                const obstacleRect = obstacle.getRect();
+                
+                // Simple rectangle collision
+                if (playerRect.left < obstacleRect.right &&
+                    playerRect.right > obstacleRect.left &&
+                    playerRect.top < obstacleRect.bottom &&
+                    playerRect.bottom > obstacleRect.top) {
+                    
+                    // Tolerance zone (50% of obstacle width from the right edge)
+                    const toleranceZoneLeft = obstacleRect.right - (obstacleRect.width * COLLISION_TOLERANCE);
+                    
+                    // If player is in the tolerance zone (back of obstacle), don't count as collision
+                    if (playerRect.left >= toleranceZoneLeft) {
+                        continue;
+                    }
+                    
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        /**
+         * Play sound with error handling
+         */
+        function playSound(sound) {
+            if (sound && sound.readyState >= 2) {
+                sound.currentTime = 0;
+                sound.play().catch(e => {
+                    console.log('Sound play prevented:', e.message);
+                });
+            }
+        }
+        
+        /**
+         * Load image assets
+         */
+        function loadAssets() {
+            console.log(`Loading ${totalAssets} image assets...`);
+            
+            imageKeys.forEach(key => {
+                const img = new Image();
+                
+                img.onload = () => {
+                    assetsLoaded++;
+                    console.log(`Loaded ${key} (${assetsLoaded}/${totalAssets})`);
+                    
+                    if (assetsLoaded >= totalAssets) {
+                        console.log('All assets loaded successfully!');
+                        loading.classList.add('hidden');
+                        initGame();
+                    }
+                };
+                
+                img.onerror = (e) => {
+                    console.error(`Failed to load ${key} from ${assetPaths[key]}`);
+                    assetsLoaded++;
+                    
+                    if (assetsLoaded >= totalAssets) {
+                        loading.textContent = 'Some assets failed to load. Check console.';
+                        loading.classList.remove('hidden');
+                        loading.classList.add('error-message');
+                        
+                        // Still try to init game after a delay
+                        setTimeout(() => {
+                            loading.classList.add('hidden');
+                            initGame();
+                        }, 2000);
+                    }
+                };
+                
+                img.src = assetPaths[key];
+                images[key] = img;
+            });
+            
+            // Load sounds (optional, won't block game start)
+            loadSounds();
+        }
+        
+        /**
+         * Load audio assets
+         */
+        function loadSounds() {
+            try {
+                sounds.music = new Audio(assetPaths.music);
+                sounds.music.volume = 0.008;
+                sounds.music.loop = true;
+                
+                sounds.jump = new Audio(assetPaths.jump);
+                sounds.jump.volume = 0.008;
+                
+                console.log('Audio assets loaded');
+            } catch (e) {
+                console.warn('Audio loading failed:', e);
+            }
+        }
+        
+        /**
+         * Initialize game
+         */
+        function initGame() {
+            console.log('Initializing game...');
+            highScore = loadHighScore();
+            player = new Player();
+            
+            // Try to start background music
+            if (sounds.music) {
+                sounds.music.play().catch(e => {
+                    console.log('Background music autoplay prevented. User interaction needed.');
+                });
+            }
+            
+            gameLoop();
+        }
+        
+        /**
+         * Start/restart game
+         */
+        function startGame() {
+            console.log('Starting game...');
+            gameActive = true;
+            startTime = Date.now();
+            obstacles = [];
+            lastObstacleTime = Date.now();
+            player = new Player();
+            score = 0;
+            
+            // Try to resume music if it was paused
+            if (sounds.music && sounds.music.paused) {
+                sounds.music.play().catch(e => {
+                    console.log('Music play prevented');
+                });
+            }
+        }
+        
+        /**
+         * Spawn new obstacle
+         */
+        function spawnObstacle() {
+            const types = ['fly', 'snail', 'snail', 'snail'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            obstacles.push(new Obstacle(type));
+            lastObstacleTime = Date.now();
+        }
+        
+        /**
+         * Draw game background
+         */
+        function drawBackground() {
+            if (images.sky && images.sky.complete) {
+                ctx.drawImage(images.sky, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            } else {
+                ctx.fillStyle = '#87CEEB';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, GROUND_Y);
+            }
+            
+            if (images.ground && images.ground.complete) {
+                ctx.drawImage(images.ground, 0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+            } else {
+                ctx.fillStyle = '#8B7355';
+                ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, CANVAS_HEIGHT - GROUND_Y);
+            }
+        }
+        
+        /**
+         * Draw start/game over screen
+         */
+        function drawStartScreen() {
+            // Background
+            ctx.fillStyle = '#5E81A2';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Player standing
+            if (images.playerStand && images.playerStand.complete) {
+                const standWidth = images.playerStand.width * 2;
+                const standHeight = images.playerStand.height * 2;
+                ctx.drawImage(
+                    images.playerStand, 
+                    CANVAS_WIDTH/2 - standWidth/2, 
+                    200 - standHeight/2, 
+                    standWidth, 
+                    standHeight
+                );
+            }
+            
+            // Title
+            ctx.font = '50px Arial';
+            ctx.fillStyle = '#6FC4A9';
+            ctx.textAlign = 'center';
+            ctx.fillText('Rickshaw Runner', CANVAS_WIDTH/2, 80);
+            
+            // Instructions or score
+            if (score === 0) {
+                ctx.fillText('Press SPACE to run', CANVAS_WIDTH/2, 330);
+            } else {
+                ctx.fillText(`Your score: ${score}`, CANVAS_WIDTH/2, 330);
+                ctx.fillText('Press SPACE to play again', CANVAS_WIDTH/2, 370);
+            }
+        }
+        
+        /**
+         * Update game state
+         */
+        function updateGame() {
+            // Update score
+            score = displayScore();
+            if (score > highScore) {
+                highScore = score;
+                saveHighScore(highScore);
+            }
+            
+            // Update player
+            player.update(keys);
+            
+            // Spawn obstacles
+            if (Date.now() - lastObstacleTime > OBSTACLE_INTERVAL) {
+                spawnObstacle();
+            }
+            
+            // Update obstacles
+            obstacles = obstacles.filter(obs => !obs.isOffScreen());
+            obstacles.forEach(obs => obs.update());
+            
+            // Check collision
+            if (checkCollision()) {
+                console.log('Game Over! Score:', score);
+                gameActive = false;
+                obstacles = [];
+            }
+        }
+        
+        /**
+         * Draw game state
+         */
+        function drawGame() {
+            drawBackground();
+            displayScore();
+            player.draw();
+            obstacles.forEach(obs => obs.draw());
+        }
+        
+        /**
+         * Main game loop
+         */
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            if (gameActive) {
+                updateGame();
+                drawGame();
+            } else {
+                drawStartScreen();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        /**
+         * Event listeners
+         */
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            
+            // Start game on space
+            if (!gameActive && e.code === 'Space') {
+                e.preventDefault();
+                startGame();
+            }
+            
+            // Prevent space from scrolling page
+            if (e.code === 'Space') {
+                e.preventDefault();
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+        
+        // Handle visibility change to pause music
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && sounds.music) {
+                sounds.music.pause();
+            } else if (!document.hidden && sounds.music && gameActive) {
+                sounds.music.play().catch(e => {});
+            }
+        });
+        
+        /**
+         * Initialize application
+         */
+        console.log('Rickshaw Runner - Starting...');
+        loadAssets();
+    </script>
+</body>
+</html>
