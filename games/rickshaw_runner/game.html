@@ -28,19 +28,6 @@
             width: 100%;
         }
         
-        h1 {
-            color: white;
-            font-size: 3em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        .subtitle {
-            color: rgba(255,255,255,0.9);
-            font-size: 1.2em;
-            margin-bottom: 30px;
-        }
-        
         #game-container {
             background: #000;
             border-radius: 10px;
@@ -55,25 +42,6 @@
             width: 100%;
             height: auto;
             image-rendering: pixelated;
-        }
-        
-        .instructions {
-            background: rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 20px;
-            color: white;
-        }
-        
-        .instructions h2 {
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-        
-        .instructions p {
-            margin: 10px 0;
-            font-size: 1.1em;
         }
 
         #loading {
@@ -101,19 +69,9 @@
 </head>
 <body>
     <div class="container">
-        <h1>🛺 Rickshaw Runner</h1>
-        <p class="subtitle">Jump over obstacles and beat your high score!</p>
-        
         <div id="game-container">
             <div id="loading">Loading game...</div>
             <canvas id="gameCanvas" width="800" height="400"></canvas>
-        </div>
-        
-        <div class="instructions">
-            <h2>How to Play</h2>
-            <p><strong>Press SPACE</strong> to jump over obstacles</p>
-            <p>Avoid the flying lights and bikes</p>
-            <p>Try to beat your high score!</p>
         </div>
     </div>
 
@@ -137,6 +95,9 @@
         let startTime = 0;
         let score = 0;
         let highScore = 0;
+        let gameOverTime = 0;
+        const RESTART_DELAY = 2000; // 2 seconds delay before allowing restart
+        const PLAYER_X = 80; // Player's X position for scoring
         
         // Asset paths
         const assetPaths = {
@@ -256,6 +217,7 @@
                 this.type = type;
                 this.frameIndex = 0;
                 this.frameCounter = 0;
+                this.scored = false; // Track if this obstacle has been scored
                 
                 if (type === 'fly') {
                     this.frames = [images.light1, images.light2];
@@ -325,17 +287,13 @@
          * Display current score and high score
          */
         function displayScore() {
-            const currentTime = Math.floor((Date.now() - startTime) / 1000);
-            
             ctx.font = '50px Arial';
             ctx.fillStyle = '#404040';
             ctx.textAlign = 'left';
-            ctx.fillText(`Score: ${currentTime}`, 50, 50);
+            ctx.fillText(`Score: ${score}`, 50, 50);
             
             ctx.textAlign = 'right';
             ctx.fillText(`High Score: ${highScore}`, CANVAS_WIDTH - 50, 50);
-            
-            return currentTime;
         }
         
         /**
@@ -541,7 +499,13 @@
                 ctx.fillText('Press SPACE to run', CANVAS_WIDTH/2, 330);
             } else {
                 ctx.fillText(`Your score: ${score}`, CANVAS_WIDTH/2, 330);
-                ctx.fillText('Press SPACE to play again', CANVAS_WIDTH/2, 370);
+                
+                // Only show restart message if delay has passed
+                const timeSinceGameOver = Date.now() - gameOverTime;
+                if (timeSinceGameOver >= RESTART_DELAY) {
+                    ctx.fillStyle = '#6FC4A9';
+                    ctx.fillText('Press SPACE to play again', CANVAS_WIDTH/2, 370);
+                }
             }
         }
         
@@ -549,12 +513,8 @@
          * Update game state
          */
         function updateGame() {
-            // Update score
-            score = displayScore();
-            if (score > highScore) {
-                highScore = score;
-                saveHighScore(highScore);
-            }
+            // Display score
+            displayScore();
             
             // Update player
             player.update(keys);
@@ -564,14 +524,29 @@
                 spawnObstacle();
             }
             
-            // Update obstacles
+            // Update obstacles and check for scoring
             obstacles = obstacles.filter(obs => !obs.isOffScreen());
-            obstacles.forEach(obs => obs.update());
+            obstacles.forEach(obs => {
+                obs.update();
+                
+                // Check if obstacle has passed the player and hasn't been scored yet
+                if (!obs.scored && obs.x < PLAYER_X) {
+                    obs.scored = true;
+                    score++;
+                    
+                    // Update high score if necessary
+                    if (score > highScore) {
+                        highScore = score;
+                        saveHighScore(highScore);
+                    }
+                }
+            });
             
             // Check collision
             if (checkCollision()) {
                 console.log('Game Over! Score:', score);
                 gameActive = false;
+                gameOverTime = Date.now();
                 obstacles = [];
             }
         }
@@ -609,10 +584,17 @@
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
             
-            // Start game on space
+            // Start game on space (with delay check if game just ended)
             if (!gameActive && e.code === 'Space') {
                 e.preventDefault();
-                startGame();
+                
+                // Check if enough time has passed since game over
+                const timeSinceGameOver = Date.now() - gameOverTime;
+                if (gameOverTime === 0 || timeSinceGameOver >= RESTART_DELAY) {
+                    startGame();
+                } else {
+                    console.log('Please wait before restarting...');
+                }
             }
             
             // Prevent space from scrolling page
