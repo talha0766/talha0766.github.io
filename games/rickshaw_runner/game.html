@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Rickshaw Runner</title>
     <style>
         * {
@@ -20,6 +20,7 @@
             justify-content: center;
             min-height: 100vh;
             padding: 20px;
+            overflow: hidden;
         }
         
         .container {
@@ -35,7 +36,7 @@
             overflow: hidden;
             margin: 0 auto;
             position: relative;
-            touch-action: none; /* Prevent default touch behaviors */
+            touch-action: none;
         }
         
         #gameCanvas {
@@ -67,9 +68,77 @@
             border-radius: 5px;
             margin-top: 10px;
         }
+
+        /* Rotation overlay for portrait mode */
+        #rotate-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #rotate-overlay .rotate-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: rotate 2s infinite ease-in-out;
+        }
+
+        #rotate-overlay .rotate-text {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        @keyframes rotate {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+
+        /* Force landscape on mobile devices */
+        @media screen and (max-width: 768px) and (orientation: portrait) {
+            #rotate-overlay {
+                display: flex !important;
+            }
+            
+            #game-container {
+                display: none;
+            }
+        }
+
+        /* Optimize for landscape mobile */
+        @media screen and (max-width: 768px) and (orientation: landscape) {
+            body {
+                padding: 10px;
+            }
+            
+            #game-container {
+                max-height: 90vh;
+                width: auto;
+            }
+            
+            #gameCanvas {
+                max-height: 90vh;
+                width: auto;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Rotation overlay for portrait mode -->
+    <div id="rotate-overlay">
+        <div class="rotate-icon">📱➜🔄</div>
+        <div class="rotate-text">Please rotate your device to landscape mode</div>
+    </div>
+
     <div class="container">
         <div id="game-container">
             <div id="loading">Loading game...</div>
@@ -98,8 +167,8 @@
         let score = 0;
         let highScore = 0;
         let gameOverTime = 0;
-        const RESTART_DELAY = 10; // 1 seconds delay before allowing restart
-        const PLAYER_X = 80; // Player's X position for scoring
+        const RESTART_DELAY = 10;
+        const PLAYER_X = 80;
         
         // Asset paths
         const assetPaths = {
@@ -219,7 +288,7 @@
                 this.type = type;
                 this.frameIndex = 0;
                 this.frameCounter = 0;
-                this.scored = false; // Track if this obstacle has been scored
+                this.scored = false;
                 
                 if (type === 'fly') {
                     this.frames = [images.light1, images.light2];
@@ -307,16 +376,13 @@
             for (let obstacle of obstacles) {
                 const obstacleRect = obstacle.getRect();
                 
-                // Simple rectangle collision
                 if (playerRect.left < obstacleRect.right &&
                     playerRect.right > obstacleRect.left &&
                     playerRect.top < obstacleRect.bottom &&
                     playerRect.bottom > obstacleRect.top) {
                     
-                    // Tolerance zone (50% of obstacle width from the right edge)
                     const toleranceZoneLeft = obstacleRect.right - (obstacleRect.width * COLLISION_TOLERANCE);
                     
-                    // If player is in the tolerance zone (back of obstacle), don't count as collision
                     if (playerRect.left >= toleranceZoneLeft) {
                         continue;
                     }
@@ -368,7 +434,6 @@
                         loading.classList.remove('hidden');
                         loading.classList.add('error-message');
                         
-                        // Still try to init game after a delay
                         setTimeout(() => {
                             loading.classList.add('hidden');
                             initGame();
@@ -380,7 +445,6 @@
                 images[key] = img;
             });
             
-            // Load sounds (optional, won't block game start)
             loadSounds();
         }
         
@@ -410,7 +474,6 @@
             highScore = loadHighScore();
             player = new Player();
             
-            // Try to start background music
             if (sounds.music) {
                 sounds.music.play().catch(e => {
                     console.log('Background music autoplay prevented. User interaction needed.');
@@ -432,7 +495,6 @@
             player = new Player();
             score = 0;
             
-            // Try to resume music if it was paused
             if (sounds.music && sounds.music.paused) {
                 sounds.music.play().catch(e => {
                     console.log('Music play prevented');
@@ -473,11 +535,9 @@
          * Draw start/game over screen
          */
         function drawStartScreen() {
-            // Background
             ctx.fillStyle = '#5E81A2';
             ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
             
-            // Player standing
             if (images.playerStand && images.playerStand.complete) {
                 const standWidth = images.playerStand.width * 2;
                 const standHeight = images.playerStand.height * 2;
@@ -490,23 +550,20 @@
                 );
             }
             
-            // Title
             ctx.font = '50px Arial';
             ctx.fillStyle = '#6FC4A9';
             ctx.textAlign = 'center';
             ctx.fillText('Rickshaw Runner', CANVAS_WIDTH/2, 80);
             
-            // Instructions or score
             if (score === 0) {
-                ctx.fillText('Press SPACE or TAP to run', CANVAS_WIDTH/2, 330);
+                ctx.fillText('Press SPACE to run', CANVAS_WIDTH/2, 330);
             } else {
                 ctx.fillText(`Your score: ${score}`, CANVAS_WIDTH/2, 330);
                 
-                // Only show restart message if delay has passed
                 const timeSinceGameOver = Date.now() - gameOverTime;
                 if (timeSinceGameOver >= RESTART_DELAY) {
                     ctx.fillStyle = '#6FC4A9';
-                    ctx.fillText('Press SPACE or TAP to play again', CANVAS_WIDTH/2, 370);
+                    ctx.fillText('Press SPACEto play again', CANVAS_WIDTH/2, 370);
                 }
             }
         }
@@ -515,28 +572,21 @@
          * Update game state
          */
         function updateGame() {
-            // Display score
             displayScore();
-            
-            // Update player
             player.update(keys);
             
-            // Spawn obstacles
             if (Date.now() - lastObstacleTime > OBSTACLE_INTERVAL) {
                 spawnObstacle();
             }
             
-            // Update obstacles and check for scoring
             obstacles = obstacles.filter(obs => !obs.isOffScreen());
             obstacles.forEach(obs => {
                 obs.update();
                 
-                // Check if obstacle has passed the player and hasn't been scored yet
                 if (!obs.scored && obs.x < PLAYER_X) {
                     obs.scored = true;
                     score++;
                     
-                    // Update high score if necessary
                     if (score > highScore) {
                         highScore = score;
                         saveHighScore(highScore);
@@ -544,7 +594,6 @@
                 }
             });
             
-            // Check collision
             if (checkCollision()) {
                 console.log('Game Over! Score:', score);
                 gameActive = false;
@@ -567,7 +616,6 @@
          * Main game loop
          */
         function gameLoop() {
-            // Clear canvas
             ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
             
             if (gameActive) {
@@ -585,14 +633,11 @@
          */
         function handleJump() {
             if (gameActive) {
-                // Simulate spacebar press for player jump
                 keys['Space'] = true;
-                // Reset after a short delay
                 setTimeout(() => {
                     keys['Space'] = false;
                 }, 100);
             } else {
-                // Start game if not active (with delay check)
                 const timeSinceGameOver = Date.now() - gameOverTime;
                 if (gameOverTime === 0 || timeSinceGameOver >= RESTART_DELAY) {
                     startGame();
@@ -608,11 +653,9 @@
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
             
-            // Start game on space (with delay check if game just ended)
             if (!gameActive && e.code === 'Space') {
                 e.preventDefault();
                 
-                // Check if enough time has passed since game over
                 const timeSinceGameOver = Date.now() - gameOverTime;
                 if (gameOverTime === 0 || timeSinceGameOver >= RESTART_DELAY) {
                     startGame();
@@ -621,7 +664,6 @@
                 }
             }
             
-            // Prevent space from scrolling page
             if (e.code === 'Space') {
                 e.preventDefault();
             }
@@ -631,19 +673,16 @@
             keys[e.code] = false;
         });
         
-        // Touch/tap support for mobile
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             handleJump();
         });
         
-        // Mouse click support (also works on mobile)
         canvas.addEventListener('click', (e) => {
             e.preventDefault();
             handleJump();
         });
         
-        // Handle visibility change to pause music
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && sounds.music) {
                 sounds.music.pause();
