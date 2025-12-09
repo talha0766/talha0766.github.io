@@ -35,6 +35,7 @@
             overflow: hidden;
             margin: 0 auto;
             position: relative;
+            touch-action: none; /* Prevent default touch behaviors */
         }
         
         #gameCanvas {
@@ -42,6 +43,7 @@
             width: 100%;
             height: auto;
             image-rendering: pixelated;
+            cursor: pointer;
         }
 
         #loading {
@@ -496,7 +498,7 @@
             
             // Instructions or score
             if (score === 0) {
-                ctx.fillText('Press SPACE to run', CANVAS_WIDTH/2, 330);
+                ctx.fillText('Press SPACE or TAP to run', CANVAS_WIDTH/2, 330);
             } else {
                 ctx.fillText(`Your score: ${score}`, CANVAS_WIDTH/2, 330);
                 
@@ -504,7 +506,7 @@
                 const timeSinceGameOver = Date.now() - gameOverTime;
                 if (timeSinceGameOver >= RESTART_DELAY) {
                     ctx.fillStyle = '#6FC4A9';
-                    ctx.fillText('Press SPACE to play again', CANVAS_WIDTH/2, 370);
+                    ctx.fillText('Press SPACE or TAP to play again', CANVAS_WIDTH/2, 370);
                 }
             }
         }
@@ -579,6 +581,28 @@
         }
         
         /**
+         * Handle jump action (for both keyboard and touch)
+         */
+        function handleJump() {
+            if (gameActive) {
+                // Simulate spacebar press for player jump
+                keys['Space'] = true;
+                // Reset after a short delay
+                setTimeout(() => {
+                    keys['Space'] = false;
+                }, 100);
+            } else {
+                // Start game if not active (with delay check)
+                const timeSinceGameOver = Date.now() - gameOverTime;
+                if (gameOverTime === 0 || timeSinceGameOver >= RESTART_DELAY) {
+                    startGame();
+                } else {
+                    console.log('Please wait before restarting...');
+                }
+            }
+        }
+        
+        /**
          * Event listeners
          */
         window.addEventListener('keydown', (e) => {
@@ -605,6 +629,18 @@
         
         window.addEventListener('keyup', (e) => {
             keys[e.code] = false;
+        });
+        
+        // Touch/tap support for mobile
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleJump();
+        });
+        
+        // Mouse click support (also works on mobile)
+        canvas.addEventListener('click', (e) => {
+            e.preventDefault();
+            handleJump();
         });
         
         // Handle visibility change to pause music
