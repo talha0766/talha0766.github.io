@@ -69,48 +69,41 @@
             margin-top: 10px;
         }
 
-        /* Rotation overlay for portrait mode */
-        #rotate-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            z-index: 9999;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            color: white;
-            text-align: center;
-            padding: 20px;
-        }
-
-        #rotate-overlay .rotate-icon {
-            font-size: 80px;
-            margin-bottom: 20px;
-            animation: rotate 2s infinite ease-in-out;
-        }
-
-        #rotate-overlay .rotate-text {
-            font-size: 24px;
-            font-weight: bold;
-        }
-
-        @keyframes rotate {
-            0%, 100% { transform: rotate(0deg); }
-            50% { transform: rotate(90deg); }
-        }
-
-        /* Force landscape on mobile devices */
+        /* Auto-rotate to landscape on mobile devices in portrait mode */
         @media screen and (max-width: 768px) and (orientation: portrait) {
-            #rotate-overlay {
-                display: flex !important;
+            body {
+                position: fixed;
+                width: 100vh;
+                height: 100vw;
+                top: 0;
+                left: 0;
+                transform: rotate(90deg);
+                transform-origin: left top;
+                overflow-x: hidden;
+            }
+            
+            body::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                transform: translateX(100%) rotate(-90deg);
+                transform-origin: top left;
+            }
+            
+            .container {
+                width: 100%;
+                height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
             
             #game-container {
-                display: none;
+                width: 90vw;
+                max-width: none;
             }
         }
 
@@ -133,12 +126,6 @@
     </style>
 </head>
 <body>
-    <!-- Rotation overlay for portrait mode -->
-    <div id="rotate-overlay">
-        <div class="rotate-icon">📱➜🔄</div>
-        <div class="rotate-text">Please rotate your device to landscape mode</div>
-    </div>
-
     <div class="container">
         <div id="game-container">
             <div id="loading">Loading game...</div>
@@ -556,14 +543,14 @@
             ctx.fillText('Rickshaw Runner', CANVAS_WIDTH/2, 80);
             
             if (score === 0) {
-                ctx.fillText('Press SPACE to run', CANVAS_WIDTH/2, 330);
+                ctx.fillText('Press SPACE or TAP to run', CANVAS_WIDTH/2, 330);
             } else {
                 ctx.fillText(`Your score: ${score}`, CANVAS_WIDTH/2, 330);
                 
                 const timeSinceGameOver = Date.now() - gameOverTime;
                 if (timeSinceGameOver >= RESTART_DELAY) {
                     ctx.fillStyle = '#6FC4A9';
-                    ctx.fillText('Press SPACEto play again', CANVAS_WIDTH/2, 370);
+                    ctx.fillText('Press SPACE or TAP to play again', CANVAS_WIDTH/2, 370);
                 }
             }
         }
